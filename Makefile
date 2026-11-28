@@ -410,9 +410,15 @@ test: $(TEST_BINS) $(TEST_PLUGINS) $(ALL_WINE) $(ALL_WINEFIX) $(ALL_WIN_TEST) $(
 	    EXBIT_TEST_PLUGINS=$(BUILD)/test-plugins EXBIT_WIN_TEST_PLUGINS=$(WIN_DIR) $$t || failed="$$failed $${t##*/}"; done; \
 	if [ -n "$$failed" ]; then echo "== FAILED:$$failed"; exit 1; fi; echo "== all tests passed"
 
-# only the tests the change from commit BASE reaches (tools/affected_tests.sh); every test if it can't tell
+# benchmarks: timed against the machine's own state (other programs, its power settings), so run by hand
+# (make test TESTS=build/tests/test_plugin_speed), not by test-affected and the pre-push hook
+BENCHMARKS := $(BUILD)/tests/test_plugin_speed$(EXE)
+# only the tests the change from commit BASE reaches (tools/affected_tests.sh), benchmarks left out; every test if it
+# can't tell
 test-affected: $(TEST_BINS) $(TEST_PLUGINS) $(ALL_WINE) $(ALL_WINEFIX) $(ALL_WIN_TEST) $(ALL_SPEED_REFERENCE)
-	@t=$$(tools/affected_tests.sh $(BASE)) || t="$(TEST_BINS)"; t=$$(echo $$t); \
+	@t=$$(tools/affected_tests.sh $(BASE)) || t="$(TEST_BINS)"; \
+	t=$$(for x in $$t; do case " $(BENCHMARKS) " in *" $$x "*) echo "== $$x: a benchmark, run by hand" >&2 ;; *) echo $$x ;; esac; done); \
+	t=$$(echo $$t); \
 	if [ -z "$$t" ]; then echo "== no test reaches this change"; \
 	else echo "== $$(echo $$t | wc -w) of $(words $(TEST_BINS)) tests reach this change"; \
 	    $(MAKE) --no-print-directory test TESTS="$$t"; fi
