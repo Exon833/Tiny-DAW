@@ -598,7 +598,9 @@ static void testCreatedTime() {
     CHECK(other.createdUnixSeconds >= before);
 
     // an older file without "created": the file's own creation time (else when it was last changed)
-    std::string older = kDir + "/NoCreated.json";
+    // (a new name each run: NTFS gives a file made within 15 s of one deleted under its name that one's creation
+    // time, "file tunneling", and the last run's was just cleared away)
+    std::string older = kDir + "/NoCreated-" + std::to_string(before) + ".json";
     util::writeFile(older, R"({"format": "exbit-project", "version": 1, "tracks": [], "clips": []})");
     int64_t fileMade = file_birth_time::fileBirthTime(older);
     CHECK(fileMade >= before - 2 && fileMade <= (int64_t)std::time(nullptr) + 2);
