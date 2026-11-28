@@ -13,8 +13,9 @@
 // percentile per buffer, the bridge's overhead (Exbit minus the reference) and the buffers over their deadline.
 // Checked, for Windows plugins: through a plugin host, at 256 and 1024 frames, the overhead at most each crossing's
 // floor (tests/plugin_speed/floor_round_trip.h, measured first) plus CROSSING_ABOVE_FLOOR per crossing, plus the
-// mixer's own overhead (what the in-process target measured for that case and size); and no buffer of one instance
-// over its deadline at 64 frames. A side whose plugins, Wine or MinGW are missing is skipped.
+// mixer's own overhead (what the in-process target measured for that case and size), plus PLUGIN_SLOWER_SHARE of the
+// reference (the plugin's own code runs a little slower in a second process: fewer branches predicted, more TLB
+// misses, with the same instructions); and no buffer of one instance over its deadline at 64 frames. A side whose plugins, Wine or MinGW are missing is skipped.
 // EXBIT_SPEED_TARGET=<text> and EXBIT_SPEED_CASE=<text> measure only the targets or cases whose name holds it.
 #include <chrono>
 #include <cstdlib>
@@ -45,6 +46,7 @@ namespace {
 
 const std::string REPORT_PATH = "build/plugin-speed/report.md";
 const double CROSSING_ABOVE_FLOOR = 5e-6;  // seconds a crossing may cost above the floor
+const double PLUGIN_SLOWER_SHARE = 0.10;   // of the reference's median: the plugin computing slower in its host
 const double MIXER_SHARE_FALLBACK = 0.05;  // of the reference's median: the mixer's allowance if not measured
 
 // where the numbers are measured: the plugins as Exbit loads them, and how the bare reference calls them
@@ -97,14 +99,15 @@ void reportAndCheck(const SpeedTarget& target, const std::string& speedCase, int
         const int crossings = speedCase == "one" ? 1 : speedCase == "chain" ? 4 : 8;  // (per buffer)
         const auto mixer = mixerOverheadSeconds.find(key);
         const double budget = crossings * (floorSeconds + CROSSING_ABOVE_FLOOR) +
+                              PLUGIN_SLOWER_SHARE * reference.medianSeconds +
                               (mixer != mixerOverheadSeconds.end() ? mixer->second
                                                                    : MIXER_SHARE_FALLBACK * reference.medianSeconds);
         if (overhead > budget)
             printf("   FAILS: %s, %s, %d frames: Exbit adds %s µs to the reference's time (budget %s µs: %d "
-                   "crossing%s of %s µs floor + %s µs, and the mixer's own)\n",
+                   "crossing%s of %s µs floor + %s µs, the plugin %.0f%% slower, and the mixer's own)\n",
                    target.name.c_str(), speedCase.c_str(), frames, micro(overhead).c_str(), micro(budget).c_str(),
                    crossings, crossings == 1 ? "" : "s", micro(floorSeconds).c_str(),
-                   micro(CROSSING_ABOVE_FLOOR).c_str());
+                   micro(CROSSING_ABOVE_FLOOR).c_str(), PLUGIN_SLOWER_SHARE * 100);
         CHECK(overhead <= budget);
     }
     if (frames == 64 && speedCase == "one") {
